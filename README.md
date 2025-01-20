@@ -1,4 +1,6 @@
-# STALZONE
+# STALZONE ![image](https://github.com/user-attachments/assets/914e18e3-f14c-4278-a493-89eb338c33c9)
+![image](https://github.com/user-attachments/assets/ef45daea-ba51-4d50-bb53-5ed619362ccc)
+
 
 Простой бот для выбросов, пробоев, перезапуска серверов.
 
