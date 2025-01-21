@@ -47,7 +47,13 @@ function timeDifference(time) {
     const diff = time - new Date();
     if (diff < 0) {
         const minutes = Math.floor(Math.abs(diff) / 1000 / 60);
-        return `${minutes}m ago`;
+        const hours = Math.floor(minutes / 60);
+        const remainingMinutes = minutes % 60;
+        if (hours > 0) {
+            return `${hours}h ${remainingMinutes}m ago`;
+        } else {
+            return `${minutes}m ago`;
+        }
     } else {
         const minutes = Math.floor(diff / 1000 / 60);
         const seconds = Math.floor((diff / 1000) % 60);
