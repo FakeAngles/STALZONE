@@ -77,6 +77,9 @@ Server Members Intent
 
 Затем просто сохраните настройки, и бот будет работать.
 
+![image](https://github.com/user-attachments/assets/fe391c40-9c0d-409e-bc7d-b3f6bf0adfcf)
+
+
 --------------------------------------------------------------
 
 
