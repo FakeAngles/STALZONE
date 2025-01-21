@@ -1,7 +1,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const { Client, GatewayIntentBits, PermissionsBitField, SlashCommandBuilder, Routes, InteractionReplyFlags } = require('discord.js');
+const { Client, GatewayIntentBits, PermissionsBitField, SlashCommandBuilder, Routes } = require('discord.js');
 const { REST } = require('@discordjs/rest');
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
 
@@ -33,50 +33,61 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
     }
 })();
 
+const activeIntervals = { vibros: {}, proboi: {} };
+
+function clearIntervalForType(guildId, type) {
+    if (activeIntervals[type][guildId]) {
+        clearInterval(activeIntervals[type][guildId]);
+        delete activeIntervals[type][guildId];
+    }
+}
+
 function getDiscordExactTime(date) { return `<t:${Math.floor(date.getTime() / 1000)}:t>`; }
 function timeDifference(time) {
     const diff = time - new Date();
-    const minutes = Math.floor(diff / 1000 / 60);
-    const seconds = Math.floor((diff / 1000) % 60);
-    return diff < 0 ? `${Math.abs(minutes)}m ago` : `${minutes}:${seconds.toString().padStart(2, '0')} left`;
+    if (diff < 0) {
+        const minutes = Math.floor(Math.abs(diff) / 1000 / 60);
+        return `${minutes}m ago`;
+    } else {
+        const minutes = Math.floor(diff / 1000 / 60);
+        const seconds = Math.floor((diff / 1000) % 60);
+        return `${minutes}:${seconds.toString().padStart(2, '0')} left`;
+    }
 }
 
-function updateTimer(message, eruptionTime, damageBeginsTime, artifactsSpawnTime, safeToLeaveTime) {
-    setInterval(() => {
+function updateTimer(message, eruptionTime, damageBeginsTime, artifactsSpawnTime, safeToLeaveTime, guildId, type) {
+    clearIntervalForType(guildId, type);
+    activeIntervals[type][guildId] = setInterval(() => {
         const updatedMessage = {
             embeds: [{
-                title: "В Зоне произошел Выброс!",
-                color: 0xff0000,
-                fields: [
+                title: type === 'vibros' ? "В Зоне произошел Выброс!" : "В Зоне появился Пробой!",
+                color: type === 'vibros' ? 0xff0000 : 0x3498db,
+                fields: type === 'vibros' ? [
                     { name: "Время выброса", value: `${getDiscordExactTime(eruptionTime)} (${timeDifference(eruptionTime)})`, inline: true },
                     { name: "Урон начнется через", value: `${getDiscordExactTime(damageBeginsTime)} (${timeDifference(damageBeginsTime)})`, inline: true },
                     { name: "Время спавна артефактов", value: `${getDiscordExactTime(artifactsSpawnTime)} (${timeDifference(artifactsSpawnTime)})`, inline: true },
                     { name: "Выброс кончится через", value: `${getDiscordExactTime(safeToLeaveTime)} (${timeDifference(safeToLeaveTime)})`, inline: true }
+                ] : [
+                    { name: "Пробой исчезнет через", value: `${getDiscordExactTime(eruptionTime)} (${timeDifference(eruptionTime)})`, inline: true }
                 ],
-                image: { url: serverSettings.get(message.guild.id)?.imageUrl || 'https://images-ext-1.discordapp.net/external/aUBbBqUlqoswDDWH_2OVH9nW2xTjR6X2BAuWB1roLzY/%3Fformat%3Dwebp%26quality%3Dlossless/https/images-ext-1.discordapp.net/external/2sHr-dHIDH04hw4-J4uc2XbU_ryXX9_SpFnvToTnOvg/%253Fformat%253Dwebp%2526quality%253Dlossless%2526width%253D628%2526height%253D471/https/images-ext-1.discordapp.net/external/4t9fct6DamlqEUAxJZZ6Z4Je0HrLAbKodWERZVFoEWc/https/cdn.stalcrafthq.com/img/emissions/Blowout.png?format=webp&quality=lossless&width=859&height=644' },
+                image: { url: serverSettings.get(message.guild.id)?.imageUrl || (type === 'vibros' ? 'https://images-ext-1.discordapp.net/external/aUBbBqUlqoswDDWH_2OVH9nW2xTjR6X2BAuWB1roLzY/%3Fformat%3Dwebp%26quality%3Dlossless/https/images-ext-1.discordapp.net/external/2sHr-dHIDH04hw4-J4uc2XbU_ryXX9_SpFnvToTnOvg/%253Fformat%253Dwebp%2526quality%253Dlossless%2526width%253D628%2526height%253D471/https/images-ext-1.discordapp.net/external/4t9fct6DamlqEUAxJZZ6Z4Je0HrLAbKodWERZVFoEWc/https/cdn.stalcrafthq.com/img/emissions/Blowout.png?format=webp&quality=lossless&width=859&height=644' : 'https://media.discordapp.net/attachments/1123749113238917273/1330823482652495892/proboi.png?ex=6790b2f3&is=678f6173&hm=8002ab1112ab25b035451b2d45af997c94bbff72956b59e88e36c96c4bf167f2&=&format=webp&quality=lossless&width=565&height=317') },
                 footer: { text: "STALZONE" }
             }]
         };
         message.edit(updatedMessage).catch(console.error);
-    }, 5000);
+    }, 1000);
 }
 
 async function sendEruptionMessage(channel) {
-    if (!channel) {
-        console.error('Канал для уведомлений не найден.');
-        return;
-    }
-
+    if (!channel) return console.error('Канал для уведомлений не найден.');
     const now = new Date();
     const eruptionTime = new Date(now);
     const damageBeginsTime = new Date(eruptionTime.getTime() + 1 * 60 * 1000);
     const safeToLeaveTime = new Date(eruptionTime.getTime() + 5 * 60 * 1000);
     const artifactsSpawnTime = new Date(safeToLeaveTime.getTime() + 10 * 60 * 1000);
-
     const roleId = serverSettings.get(channel.guild.id)?.pingRoles?.vibros;
     const role = roleId ? channel.guild.roles.cache.get(roleId) : null;
     const roleMention = role ? `<@&${role.id}>` : '';
-
     const MESSAGE = {
         content: roleMention,
         embeds: [{
@@ -92,24 +103,17 @@ async function sendEruptionMessage(channel) {
             footer: { text: "STALZONE" }
         }]
     };
-
     const sentMessage = await channel.send(MESSAGE).catch(console.error);
-    if (sentMessage) updateTimer(sentMessage, eruptionTime, damageBeginsTime, artifactsSpawnTime, safeToLeaveTime);
+    if (sentMessage) updateTimer(sentMessage, eruptionTime, damageBeginsTime, artifactsSpawnTime, safeToLeaveTime, channel.guild.id, 'vibros');
 }
 
 async function sendProboiMessage(channel) {
-    if (!channel) {
-        console.error('Канал для уведомлений не найден.');
-        return;
-    }
-
+    if (!channel) return console.error('Канал для уведомлений не найден.');
     const now = new Date();
     const proboiTime = new Date(now.getTime() + 15 * 60 * 1000);
-
     const roleId = serverSettings.get(channel.guild.id)?.pingRoles?.proboi;
     const role = roleId ? channel.guild.roles.cache.get(roleId) : null;
     const roleMention = role ? `<@&${role.id}>` : '';
-
     const MESSAGE = {
         content: roleMention,
         embeds: [{
@@ -120,55 +124,23 @@ async function sendProboiMessage(channel) {
             footer: { text: "STALZONE" }
         }]
     };
-
     const sentMessage = await channel.send(MESSAGE).catch(console.error);
-    if (sentMessage) updateProboiTimer(sentMessage, proboiTime);
-}
-
-function updateProboiTimer(message, proboiTime) {
-    setInterval(() => {
-        const updatedMessage = {
-            embeds: [{
-                title: "В Зоне появился Пробой!",
-                color: 0x3498db,
-                fields: [{ name: "Пробой исчезнет через", value: `${getDiscordExactTime(proboiTime)} (${timeDifference(proboiTime)})`, inline: true }],
-                image: { url: serverSettings.get(message.guild.id)?.imageUrl || 'https://media.discordapp.net/attachments/1123749113238917273/1330823482652495892/proboi.png?ex=6790b2f3&is=678f6173&hm=8002ab1112ab25b035451b2d45af997c94bbff72956b59e88e36c96c4bf167f2&=&format=webp&quality=lossless&width=565&height=317' },
-                footer: { text: "STALZONE" }
-            }]
-        };
-        message.edit(updatedMessage).catch(console.error);
-    }, 5000);
+    if (sentMessage) updateTimer(sentMessage, proboiTime, null, null, null, channel.guild.id, 'proboi');
 }
 
 function checkAndSendMessages() {
     const now = new Date(Date.now() + MSK_OFFSET);
     const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-
     const mainGuildSettings = serverSettings.get(MAIN_GUILD_ID);
     if (!mainGuildSettings) return;
-
     const schedule = mainGuildSettings.schedule || [];
     const proboiSchedule = mainGuildSettings.proboiSchedule || [];
-
     serverSettings.forEach((settings, guildId) => {
         const channel = client.channels.cache.get(settings.channelId);
-        if (!channel) {
-            console.error(`Канал для уведомлений на сервере ${guildId} не найден.`);
-            return;
-        }
-
-        if (schedule.includes(currentTime)) {
-            console.log(`Sending eruption message to guild: ${guildId}`);
-            sendEruptionMessage(channel);
-        }
-
-        if (proboiSchedule.includes(currentTime)) {
-            console.log(`Sending proboi message to guild: ${guildId}`);
-            sendProboiMessage(channel);
-        }
-
+        if (!channel) return console.error(`Канал для уведомлений на сервере ${guildId} не найден.`);
+        if (schedule.includes(currentTime)) sendEruptionMessage(channel);
+        if (proboiSchedule.includes(currentTime)) sendProboiMessage(channel);
         if (currentTime === "02:00") {
-            console.log(`Sending restart notification to guild: ${guildId}`);
             channel.send({
                 embeds: [{
                     title: "Уведомление о перезапуске сервера",
@@ -193,36 +165,26 @@ client.once('ready', () => {
 
 client.on('interactionCreate', async interaction => {
     if (!interaction.isCommand()) return;
-
     const { commandName, options, member, guild } = interaction;
     const isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
     const isMainGuild = guild.id === MAIN_GUILD_ID;
 
     if (commandName === 'setping') {
         if (!isAdmin) return interaction.reply({ content: 'У вас нет прав на использование этой команды.', flags: 64 });
-
         const type = options.getString('тип');
         const role = options.getRole('роль');
         const action = options.getBoolean('действие');
-
         if (!serverSettings.has(guild.id)) serverSettings.set(guild.id, { pingRoles: {} });
         if (!serverSettings.get(guild.id).pingRoles) serverSettings.get(guild.id).pingRoles = {};
-
-        if (action) {
-            serverSettings.get(guild.id).pingRoles[type] = role.id;
-            await interaction.reply({ content: `Пинг роли ${role.name} установлен для ${type}.`, flags: 64 });
-        } else {
-            delete serverSettings.get(guild.id).pingRoles[type];
-            await interaction.reply({ content: `Пинг роли для ${type} убран.`, flags: 64 });
-        }
-
+        if (action) serverSettings.get(guild.id).pingRoles[type] = role.id;
+        else delete serverSettings.get(guild.id).pingRoles[type];
+        await interaction.reply({ content: `Пинг роли ${role.name} ${action ? 'установлен' : 'убран'} для ${type}.`, flags: 64 });
         saveSettings();
         return;
     }
 
     if (commandName === 'setchannel') {
         if (!isAdmin) return interaction.reply({ content: 'У вас нет прав на использование этой команды.', flags: 64 });
-
         const channel = options.getChannel('канал');
         if (!serverSettings.has(guild.id)) serverSettings.set(guild.id, {});
         serverSettings.get(guild.id).channelId = channel.id;
@@ -237,11 +199,9 @@ client.on('interactionCreate', async interaction => {
         const type = options.getString('тип');
         const time = options.getString('время');
         const [hours, minutes] = time.split(':').map(Number);
-
         const schedule = [];
         let nextTime = new Date();
         nextTime.setHours(hours, minutes, 0, 0);
-
         if (type === 'vibros') {
             if (nextTime < new Date()) nextTime.setDate(nextTime.getDate() + 1);
             for (let i = 0; i < 8; i++) {
@@ -257,7 +217,6 @@ client.on('interactionCreate', async interaction => {
             }
             serverSettings.get(guild.id).proboiSchedule = schedule;
         }
-
         await interaction.reply({ content: `Расписание для ${type} установлено: ${schedule.join(', ')}`, flags: 64 });
         saveSettings();
     }
@@ -265,14 +224,11 @@ client.on('interactionCreate', async interaction => {
     if (commandName === 'setaccess') {
         const user = options.getUser('пользователь');
         const access = options.getBoolean('доступ');
-
         if (!serverSettings.has(guild.id)) serverSettings.set(guild.id, { access: [] });
         if (!serverSettings.get(guild.id).access) serverSettings.get(guild.id).access = [];
-
         const userAccess = serverSettings.get(guild.id).access;
         if (access && !userAccess.includes(user.id)) userAccess.push(user.id);
         if (!access && userAccess.includes(user.id)) userAccess.splice(userAccess.indexOf(user.id), 1);
-
         serverSettings.get(guild.id).access = userAccess;
         saveSettings();
         await interaction.reply({ content: `Доступ для пользователя ${user.username} ${access ? 'выдан' : 'забран'}.`, flags: 64 });
